@@ -41,7 +41,7 @@ jobs:
 
       - name: Create stack dir on server
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo mkdir -p /srv/${{ inputs.stack_name }} && sudo chown -R $USER:$USER /srv/${{ inputs.stack_name }}"
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo mkdir -p /srv/${{ inputs.stack_name }} && sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} /srv/${{ inputs.stack_name }}"
 
       - name: Upload docker-compose.yml
         run: |

@@ -72,7 +72,7 @@ jobs:
 
       - name: Write proxy .env on server
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cat > ~/proxy/.env" <<'EOF'
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo tee ~/proxy/.env > /dev/null" <<'EOF'
           LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL || 'admin@example.com' }}
           LETSENCRYPT_STAGING=${{ secrets.LETSENCRYPT_STAGING || 'true' }}
           EOF

@@ -1,0 +1,47 @@
+name: Proxy Deploy
+on:
+  push:
+    paths:
+      - "proxy/**"
+      - ".env.example"
+      - ".github/workflows/proxy-deploy.yml"
+      - "scripts/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout infra
+        uses: actions/checkout@v4
+
+      - name: Install ssh client
+        run: sudo apt-get update && sudo apt-get install -y rsync openssh-client
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [ -n "${{ secrets.KNOWN_HOSTS }}" ]; then
+            echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -t ed25519 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+
+      - name: Sync proxy directory to server
+        run: |
+          rsync -az --delete proxy/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/proxy/
+
+      - name: Ensure env file on server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "test -f ~/hetzner-infra/.env || cp ~/hetzner-infra/.env.example ~/hetzner-infra/.env || true"
+
+      - name: Create proxy network and start Traefik
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
+            docker network create proxy >/dev/null 2>&1 || true &&
+            cd ~/proxy &&
+            docker compose pull || true &&
+            docker compose up -d
+          '

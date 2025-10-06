@@ -1,0 +1,60 @@
+name: Reusable Remote Deploy
+on:
+  workflow_call:
+    inputs:
+      stack_name:
+        description: "Name of the stack directory on the server (e.g., my-app)"
+        required: true
+        type: string
+      remote_compose_path:
+        description: "Path to docker-compose.yml in the caller repo"
+        required: true
+        type: string
+    secrets:
+      SERVER_HOST:
+        required: true
+      SERVER_USER:
+        required: true
+      SERVER_SSH_KEY:
+        required: true
+      KNOWN_HOSTS:
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout caller repo
+        uses: actions/checkout@v4
+
+      - name: Install ssh client
+        run: sudo apt-get update && sudo apt-get install -y rsync openssh-client
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [ -n "${{ secrets.KNOWN_HOSTS }}" ]; then
+            echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -t ed25519 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+
+      - name: Create stack dir on server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /srv/${{ inputs.stack_name }}"
+
+      - name: Upload docker-compose.yml
+        run: |
+          rsync -az "${{ inputs.remote_compose_path }}" \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/srv/${{ inputs.stack_name }}/docker-compose.yml
+
+      - name: Deploy stack
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            docker network create proxy >/dev/null 2>&1 || true
+            cd /srv/${{ inputs.stack_name }}
+            docker compose pull || true
+            docker compose up -d
+          "

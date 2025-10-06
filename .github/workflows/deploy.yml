@@ -1,0 +1,17 @@
+name: Deploy
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    uses: YOUR_ORG/hetzner-infra/.github/workflows/reusable-remote-deploy.yml@main
+    with:
+      stack_name: my-app # folder on server: /srv/my-app
+      remote_compose_path: docker-compose.yml # path in this repo to upload
+    secrets:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }} # optional

@@ -37,6 +37,37 @@ jobs:
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "test -f ~/hetzner-infra/.env || cp ~/hetzner-infra/.env.example ~/hetzner-infra/.env || true"
 
+      - name: Bootstrap Docker and Compose on server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
+            set -e
+
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "[bootstrap] Installing Docker..."
+              curl -fsSL https://get.docker.com | sh
+            fi
+
+            if ! docker compose version >/dev/null 2>&1; then
+              echo "[bootstrap] Installing docker compose plugin..."
+              if command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get update -y
+                sudo apt-get install -y docker-compose-plugin
+              else
+                echo "Please install docker compose plugin for your distro." >&2
+                exit 1
+              fi
+            fi
+
+            mkdir -p ~/proxy
+          '
+
+      - name: Write proxy .env on server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cat > ~/proxy/.env" <<'EOF'
+LETSENCRYPT_EMAIL=${{ vars.LETSENCRYPT_EMAIL || 'you@example.com' }}
+LETSENCRYPT_STAGING=${{ vars.LETSENCRYPT_STAGING || 'false' }}
+EOF
+
       - name: Create proxy network and start Traefik
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '

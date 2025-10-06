@@ -21,9 +21,6 @@ certificatesResolvers:
     acme:
       email: "${LETSENCRYPT_EMAIL}"
       storage: /letsencrypt/acme.json
-      # Toggle staging by env:
-      {{- /* set via LETSENCRYPT_STAGING env (see below) */ -}}
-      {{- /* For manual testing you can uncomment:
-      caServer: "https://acme-staging-v02.api.letsencrypt.org/directory"
-      */ -}}
+      # Toggle staging by setting LETSENCRYPT_STAGING=true in .env
+      caServer: "https://acme-v02.api.letsencrypt.org/directory"
       tlsChallenge: {}

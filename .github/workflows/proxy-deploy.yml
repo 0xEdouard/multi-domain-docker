@@ -84,8 +84,8 @@ jobs:
       - name: Create proxy network and start Traefik
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
-            docker network create proxy >/dev/null 2>&1 || true &&
+            sudo docker network create proxy >/dev/null 2>&1 || true &&
             cd ~/proxy &&
-            docker compose pull || true &&
-            docker compose up -d
+            sudo docker compose pull || true &&
+            sudo docker compose up -d
           '

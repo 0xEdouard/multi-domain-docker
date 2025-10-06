@@ -8,7 +8,10 @@ CMD="traefik \
   --providers.file.directory=/etc/traefik/dynamic \
   --entrypoints.web.address=:80 \
   --entrypoints.websecure.address=:443 \
-  --api.dashboard=false"
+  --api.dashboard=false \
+  --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL} \
+  --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json \
+  --certificatesresolvers.le.acme.tlschallenge=true"
 
 # Add staging server if LETSENCRYPT_STAGING is true
 if [ "$LETSENCRYPT_STAGING" = "true" ]; then

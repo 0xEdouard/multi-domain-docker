@@ -15,10 +15,3 @@ entryPoints:
     address: ":80"
   websecure:
     address: ":443"
-
-certificatesResolvers:
-  le:
-    acme:
-      email: "${LETSENCRYPT_EMAIL}"
-      storage: /letsencrypt/acme.json
-      tlsChallenge: {}

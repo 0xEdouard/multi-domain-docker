@@ -64,9 +64,9 @@ jobs:
       - name: Write proxy .env on server
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cat > ~/proxy/.env" <<'EOF'
-LETSENCRYPT_EMAIL=${{ vars.LETSENCRYPT_EMAIL || 'you@example.com' }}
-LETSENCRYPT_STAGING=${{ vars.LETSENCRYPT_STAGING || 'false' }}
-EOF
+          LETSENCRYPT_EMAIL=${{ vars.LETSENCRYPT_EMAIL || 'you@example.com' }}
+          LETSENCRYPT_STAGING=${{ vars.LETSENCRYPT_STAGING || 'false' }}
+          EOF
 
       - name: Create proxy network and start Traefik
         run: |

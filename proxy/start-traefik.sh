@@ -1,10 +1,6 @@
 #!/bin/bash
 
-echo "LETSENCRYPT_STAGING is set to: '$LETSENCRYPT_STAGING'"
-
-# Create dynamic traefik config with conditional staging
 if [ "$LETSENCRYPT_STAGING" = "true" ]; then
-  echo "Using staging Let's Encrypt server"
   cat > /etc/traefik/traefik-dynamic.yml << EOF
 log:
   level: WARN
@@ -33,7 +29,6 @@ certificatesResolvers:
       caServer: "https://acme-staging-v02.api.letsencrypt.org/directory"
 EOF
 else
-  echo "Using production Let's Encrypt server"
   cat > /etc/traefik/traefik-dynamic.yml << EOF
 log:
   level: WARN

@@ -33,10 +33,6 @@ jobs:
         run: |
           rsync -az --delete --rsync-path="sudo rsync" proxy/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/proxy/
 
-      - name: Ensure env file on server
-        run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "test -f ~/hetzner-infra/.env || cp ~/hetzner-infra/.env.example ~/hetzner-infra/.env || true"
-
       - name: Bootstrap Docker and Compose on server
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '

@@ -43,10 +43,10 @@ jobs:
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo mkdir -p /srv/${{ inputs.stack_name }} && sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} /srv/${{ inputs.stack_name }}"
 
-      - name: Upload docker-compose.yml
+      - name: Upload application files
         run: |
-          rsync -az --rsync-path="sudo rsync" "${{ inputs.remote_compose_path }}" \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/srv/${{ inputs.stack_name }}/docker-compose.yml
+          rsync -az --rsync-path="sudo rsync" --exclude='.git' --exclude='node_modules' --exclude='.env' . \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/srv/${{ inputs.stack_name }}/
 
       - name: Deploy stack
         run: |

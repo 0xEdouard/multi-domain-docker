@@ -17,8 +17,6 @@ on:
         required: true
       SERVER_SSH_KEY:
         required: true
-      KNOWN_HOSTS:
-        required: false
 
 jobs:
   deploy:
@@ -43,7 +41,7 @@ jobs:
 
       - name: Create stack dir on server
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /srv/${{ inputs.stack_name }}"
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo mkdir -p /srv/${{ inputs.stack_name }}"
 
       - name: Upload docker-compose.yml
         run: |
@@ -53,8 +51,8 @@ jobs:
       - name: Deploy stack
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-            docker network create proxy >/dev/null 2>&1 || true
+            sudo docker network create proxy >/dev/null 2>&1 || true
             cd /srv/${{ inputs.stack_name }}
-            docker compose pull || true
-            docker compose up -d
+            sudo docker compose pull || true
+            sudo docker compose up -d
           "

@@ -83,5 +83,6 @@ jobs:
             sudo docker network create proxy >/dev/null 2>&1 || true &&
             cd ~/proxy &&
             sudo docker compose pull || true &&
+            sudo docker compose down || true &&
             sudo docker compose up -d
           '

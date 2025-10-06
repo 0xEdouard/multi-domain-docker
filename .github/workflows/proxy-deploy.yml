@@ -76,6 +76,8 @@ jobs:
           LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL || 'admin@example.com' }}
           LETSENCRYPT_STAGING=${{ secrets.LETSENCRYPT_STAGING || 'true' }}
           EOF
+          echo "Created .env with email: ${{ secrets.LETSENCRYPT_EMAIL || 'admin@example.com' }}"
+          echo "Staging mode: ${{ secrets.LETSENCRYPT_STAGING || 'true' }}"
 
       - name: Create proxy network and start Traefik
         run: |

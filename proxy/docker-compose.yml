@@ -6,7 +6,7 @@ services:
   traefik:
     image: traefik:v3.1
     restart: unless-stopped
-    command: ["/start-traefik.sh"]
+    command: ["sh", "-c", "chmod +x /start-traefik.sh && /start-traefik.sh"]
     environment:
       - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
       - LETSENCRYPT_STAGING=${LETSENCRYPT_STAGING:-false}

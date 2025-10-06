@@ -31,7 +31,7 @@ jobs:
 
       - name: Sync proxy directory to server
         run: |
-          rsync -az --delete proxy/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/proxy/
+          rsync -az --delete --rsync-path="sudo rsync" proxy/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USER }}/proxy/
 
       - name: Ensure env file on server
         run: |

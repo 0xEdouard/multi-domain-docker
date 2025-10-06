@@ -54,5 +54,6 @@ jobs:
             sudo docker network create proxy >/dev/null 2>&1 || true
             cd /srv/${{ inputs.stack_name }}
             sudo docker compose pull || true
+            sudo docker compose build --no-cache
             sudo docker compose up -d
           "

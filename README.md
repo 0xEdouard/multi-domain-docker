@@ -28,32 +28,35 @@ networks:
 
 services:
   app:
-    image: myapp:latest
+    build: ./myapp
+    container_name: myapp
+    restart: unless-stopped
     networks: [proxy]
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.myapp.rule=Host(`myapp.com`)"
-      - "traefik.http.routers.myapp.entrypoints=websecure"
-      - "traefik.http.routers.myapp.tls.certresolver=le"
-      - "traefik.http.middlewares.security-headers@file"
+      - traefik.enable=true
+      - traefik.http.routers.myapp.rule=Host(`myapp.com`)
+      - traefik.http.routers.myapp.entrypoints=websecure
+      - traefik.http.routers.myapp.tls.certresolver=le
+      - traefik.http.services.myapp.loadbalancer.server.port=80
 ```
 
 **.github/workflows/deploy.yml**:
 
 ```yaml
 name: Deploy
-on: [push]
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
 jobs:
   deploy:
-    uses: YOUR_ORG/multi-domain-infra/.github/workflows/reusable-remote-deploy.yml@main
+    uses: 0xEdouard/multi-domain-infra/.github/workflows/reusable-remote-deploy.yml@main
     with:
-      stack-name: myapp
-      compose-path: docker-compose.yml
-    secrets: inherit
+      stack_name: studio-51
+      remote_compose_path: docker-compose.yml
+    secrets:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
 ```
-
-## Operations
-
-- **Update proxy**: Modify `proxy/` files, re-run `Proxy » Deploy`
-- **Backup certs**: `sudo bash scripts/backup-acme.sh`
-- **View logs**: `sudo docker logs traefik`

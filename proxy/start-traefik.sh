@@ -54,7 +54,8 @@ certificatesResolvers:
     acme:
       email: "${LETSENCRYPT_EMAIL}"
       storage: /letsencrypt/acme.json
-      tlsChallenge: {}
+      httpChallenge:
+        entryPoint: web
 EOF
 fi
 

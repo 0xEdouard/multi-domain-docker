@@ -25,7 +25,8 @@ certificatesResolvers:
     acme:
       email: "${LETSENCRYPT_EMAIL}"
       storage: /letsencrypt/acme.json
-      tlsChallenge: {}
+      httpChallenge:
+        entryPoint: web
       caServer: "https://acme-staging-v02.api.letsencrypt.org/directory"
 EOF
 else

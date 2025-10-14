@@ -1,145 +1,67 @@
-# Multi-Domain Infrastructure
+# Multi-Domain Infrastructure (V2)
 
-Traefik v3 reverse proxy with automatic Let's Encrypt certificates for hosting multiple domains on a single Hetzner server.
+Unified control plane, build worker, and host agent for multi-domain deployments on a single Docker host. The original V1 (Traefik labels + rsync workflow) has been retired on this branch in favour of an automated platform experience.
 
-> **V2 (WIP)**: The `v2` branch is evolving toward a control-plane-driven experience (Go services, host agent, Docker-based deploys). See [docs/v2-architecture.md](docs/v2-architecture.md) for scope and roadmap.
+## Components
+- **control-plane/** – Go API that stores projects/services/domains, renders Traefik config, tracks build jobs, and exposes service state for the agent.
+- **build-worker/** – Long-running worker that claims build jobs, clones repos, builds/pushes images, and calls the deployment API.
+- **agent/** – Host-side daemon that writes Traefik config and reconciles Docker containers against desired state.
+- **cmd/infrctl/** – CLI for managing projects/services/domains/deployments and binding GitHub repos.
+- **docs/** – Architecture overview and GitHub integration notes.
 
-## Setup
+## Quick Start
+1. **Control Plane**
+   ```bash
+   cd control-plane
+   go run . --state ./data/state.json
+   ```
+   - Flags: `--addr`, `--state`, `--api-token`, `--le-resolver`.
+   - Rendered Traefik config: `GET /v1/traefik/config`.
 
-1. **DNS**: Point A/AAAA records for your domains to server IP
-2. **GitHub Secrets** (in this repo):
+2. **Agent** (runs on the Docker host)
+   ```bash
+   cd agent
+   go run . --control-plane=http://localhost:8080 --traefik-file=/tmp/traefik.yml \
+     --deploy-interval=20s --compose-dir ./compose
+   ```
+   - Requires Docker/Compose access (mount `/var/run/docker.sock` if containerised).
+   - Mirrors containers labelled `mdp.service=<service-id>` and maps service ports to `127.0.0.1:<internal_port>`.
 
-   - `SERVER_HOST` - Server IP/hostname
-   - `SERVER_USER` - SSH user with Docker perms
-   - `SERVER_SSH_KEY` - SSH private key (PEM)
-   - `LETSENCRYPT_EMAIL` - Email for Let's Encrypt
-   - `LETSENCRYPT_STAGING` - Set to `true` for staging certs
+3. **Build Worker**
+   ```bash
+   cd build-worker
+   go run . --control-plane=http://localhost:8080 --token=$CP_TOKEN \
+     --workspace ./worker-tmp --registry ghcr.io/your-org --push
+   ```
+   - Needs `git` + `docker`. Provide `GITHUB_TOKEN` for private repos, and Docker login for `--push`.
 
-3. **Deploy**: Run `Proxy » Deploy` workflow in GitHub Actions
+4. **CLI**
+   ```bash
+   go run ./cmd/infrctl help
+   ```
+   - Example flow:
+     ```bash
+     infrctl project create --name "Demo"
+     infrctl service create --project <project-id> --name web --image ghcr.io/org/web:latest --port 8080
+     infrctl domain add --service <service-id> --hostname demo.example.com
+     infrctl github register --repo owner/repo --service <service-id> --env production
+     ```
 
-## Deploy Apps
+## GitHub Integration Notes
+- Install the GitHub App and register repositories with `infrctl github register`. Push events queue build jobs automatically.
+- Build jobs include repo/ref/image metadata; the worker updates deployments once the image is built.
+- Additional details: [docs/github-pipeline.md](docs/github-pipeline.md).
 
-Each app repo calls the reusable workflow. Example:
+## Repository Layout
+- `control-plane/`: Go module with HTTP API and JSON-backed state.
+- `agent/`: Docker/Traefik reconciler.
+- `build-worker/`: Build + deploy pipeline runner.
+- `cmd/infrctl/`: End-user CLI.
+- `docs/`: Architectural docs and integration plans.
+- `go.work`: Go workspace binding the modules.
 
-**docker-compose.yml**:
+## Development Notes
+- All Go modules target Go 1.22+. Run `gofmt`/`go test` within each module once you install the toolchain.
+- Docker/Compose must be available wherever the agent/build worker run.
+- Traefik dynamic configuration lives under `/v1/traefik/config`; host certificates/ACME handling remains managed by Traefik itself.
 
-```yaml
-networks:
-  proxy:
-    external: true
-
-services:
-  app:
-    build: ./myapp
-    container_name: myapp
-    restart: unless-stopped
-    networks: [proxy]
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.myapp.rule=Host(`myapp.com`)
-      - traefik.http.routers.myapp.entrypoints=websecure
-      - traefik.http.routers.myapp.tls.certresolver=le
-      - traefik.http.services.myapp.loadbalancer.server.port=80
-```
-
-**.github/workflows/deploy.yml**:
-
-```yaml
-name: Deploy
-on:
-  workflow_dispatch:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    uses: 0xEdouard/multi-domain-infra/.github/workflows/reusable-remote-deploy.yml@main
-    with:
-      stack_name: studio-51
-      remote_compose_path: docker-compose.yml
-    secrets:
-      SERVER_HOST: ${{ secrets.SERVER_HOST }}
-      SERVER_USER: ${{ secrets.SERVER_USER }}
-      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
-```
-
-## V2 Control Plane (Local Dev)
-
-### Run with Go
-1. Install Go 1.22+
-2. From repo root run `cd control-plane && go run .`
-3. Flags:
-   - `--addr` (default `:8080`)
-   - `--state` (default `./data/state.json`)
-   - `--api-token` (optional bearer token)
-   - `--le-resolver` (Traefik resolver name, default `le`)
-
-### Run with Docker
-```bash
-cd control-plane
-docker compose up --build
-```
-
-- Override auth token: `CP_API_TOKEN=supersecret docker compose up --build`
-- State persists to `control-plane/data/state.json` (mounted volume).
-- Traefik config available at `GET http://localhost:8080/v1/traefik/config`
-- Future host agents will poll the API to manage proxy + workloads automatically.
-
-## Agent Stub
-
-### Run with Go
-1. Install Go 1.22+
-2. `cd agent && go run . --control-plane=http://localhost:8080 --traefik-file=./tmp/traefik.yml`
-
-Flags / env:
-- `--control-plane` or `CONTROL_PLANE_URL`
-- `--token` or `CONTROL_PLANE_TOKEN`
-- `--traefik-file` or `TRAEFIK_DYNAMIC_PATH`
-- `--poll-interval` (default `15s`)
-
-### Run with Docker
-```bash
-cd agent
-docker build -t infra-agent .
-docker run --rm -e CONTROL_PLANE_URL=http://host.docker.internal:8080 \
-  -v $(pwd)/tmp:/data \
-  infra-agent --traefik-file=/data/traefik.yml
-```
-
-The stub currently writes the fetched Traefik config and logs a TODO for container reconciliation.
-
-## CLI (`infrctl`)
-
-Build/run with Go 1.22+:
-```bash
-cd cmd/infrctl
-go run . help
-```
-
-Environment:
-- `INFRCTL_API` (default `http://localhost:8080`)
-- `INFRCTL_TOKEN` (optional bearer token)
-
-Example flow:
-```bash
-infrctl project create --name "Demo"
-infrctl service create --project <project-id> --name web --image nginx:alpine --port 8080
-infrctl domain add --service <service-id> --hostname demo.example.com
-infrctl deploy set --service <service-id> --image ghcr.io/org/demo:sha123
-infrctl builds list
-```
-
-### GitHub integration stubs
-- List registered repositories: `infrctl github repos`
-- Register a repo manually (GitHub App plumbing TBD):  
-  `infrctl github register --repo owner/name --branch main --compose docker-compose.yml`
-- GitHub App installation events auto-register repositories; the manual command is only needed for overrides or repos without installation scopes.
-- Record an installation (temporary manual step):  
-  `infrctl github installations register --account org --external-id 12345 --secret <webhook-secret>`
-- Control plane endpoint: `POST /v1/github/repos` records owner/name, branch, compose path, installation ID (if available).  
-  `POST /v1/github/installations` captures installation IDs + secrets. `POST /v1/github/webhook` currently accepts events and will verify signatures once secrets are linked.  
-  This is the foundation for wiring real GitHub webhooks and automated deploys.
-- See [docs/github-pipeline.md](docs/github-pipeline.md) for the proposed build/deploy pipeline and preview environment flow.
-- Build jobs queued from `push` webhooks are visible via `infrctl builds list`; update status manually with `infrctl builds update --id <job> --status running|succeeded|failed` while the automated builder is under construction.
-- Run the stub worker locally to auto-claim jobs: `infrctl builds worker --name local --interval 5s --auto-complete`.
-- Dedicated worker binary (see `build-worker/`) can poll `/v1/build-jobs/claim`, simulate/perform builds, and report status back to the control plane.

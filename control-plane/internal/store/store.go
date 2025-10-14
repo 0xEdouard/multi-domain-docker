@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -206,6 +207,7 @@ func cloneService(svc *models.Service) *models.Service {
 		return nil
 	}
 	copy := *svc
+	copy.Compose = svc.Compose
 	if svc.Domains != nil {
 		copy.Domains = append([]models.Domain(nil), svc.Domains...)
 	}
@@ -227,6 +229,17 @@ func (s *Store) ListRepositories() ([]*models.Repository, error) {
 	return result, nil
 }
 
+// GetRepository returns a repository by ID.
+func (s *Store) GetRepository(id string) (*models.Repository, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	repo, ok := s.data.Repos[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return cloneRepository(repo), nil
+}
+
 // UpsertRepository inserts or updates repository metadata.
 func (s *Store) UpsertRepository(repo *models.Repository) error {
 	s.mu.Lock()
@@ -235,6 +248,18 @@ func (s *Store) UpsertRepository(repo *models.Repository) error {
 	now := time.Now().UTC()
 	if existing, ok := s.data.Repos[repo.ID]; ok {
 		repo.CreatedAt = existing.CreatedAt
+		if repo.ServiceID == "" {
+			repo.ServiceID = existing.ServiceID
+		}
+		if repo.Environment == "" {
+			repo.Environment = existing.Environment
+		}
+		if repo.ComposePath == "" {
+			repo.ComposePath = existing.ComposePath
+		}
+		if existing.Installation != "" && repo.Installation == "" {
+			repo.Installation = existing.Installation
+		}
 	} else {
 		repo.CreatedAt = now
 	}
@@ -323,12 +348,17 @@ func (s *Store) CreateBuildJob(job *models.BuildJob) error {
 	if job.Status == "" {
 		job.Status = "pending"
 	}
+	if job.ServiceID != "" && job.Environment == "" {
+		job.Environment = "production"
+	}
 	now := time.Now().UTC()
 	job.CreatedAt = now
 	job.UpdatedAt = now
 	job.StartedAt = time.Time{}
 	job.CompletedAt = time.Time{}
 	job.WorkerID = ""
+	job.Artifacts = append([]string(nil), job.Artifacts...)
+	job.ComposePath = strings.TrimSpace(job.ComposePath)
 	s.data.BuildJobs[job.ID] = cloneBuildJob(job)
 	return s.persistLocked()
 }
@@ -364,6 +394,8 @@ func (s *Store) UpdateBuildJob(job *models.BuildJob) error {
 	} else if !job.CompletedAt.IsZero() {
 		job.CompletedAt = time.Time{}
 	}
+	job.Artifacts = append([]string(nil), job.Artifacts...)
+	job.ComposePath = strings.TrimSpace(job.ComposePath)
 	s.data.BuildJobs[job.ID] = cloneBuildJob(job)
 	return s.persistLocked()
 }
@@ -373,6 +405,9 @@ func cloneBuildJob(job *models.BuildJob) *models.BuildJob {
 		return nil
 	}
 	copy := *job
+	if job.Artifacts != nil {
+		copy.Artifacts = append([]string(nil), job.Artifacts...)
+	}
 	return &copy
 }
 

@@ -403,6 +403,8 @@ func handleGitHub(client apiClient, args []string) {
         branch := fs.String("branch", "main", "Default branch")
         composePath := fs.String("compose", "docker-compose.yml", "Compose file path")
         installation := fs.String("installation", "", "GitHub App installation ID (optional)")
+        serviceID := fs.String("service", "", "Service ID to deploy")
+        env := fs.String("env", "production", "Environment name")
         fs.Parse(args[1:])
 
         owner, name, err := splitRepo(*repo)
@@ -420,6 +422,10 @@ func handleGitHub(client apiClient, args []string) {
         }
         if *installation != "" {
             payload["installation_id"] = *installation
+        }
+        if *serviceID != "" {
+            payload["service_id"] = *serviceID
+            payload["environment"] = *env
         }
 
         body, err := client.postJSON("/v1/github/repos", payload)
@@ -597,7 +603,7 @@ func splitRepo(repo string) (string, string, error) {
 func printGitHubUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  infrctl github repos")
-	fmt.Println("  infrctl github register --repo owner/name [--branch main] [--compose docker-compose.yml]")
+	fmt.Println("  infrctl github register --repo owner/name [--branch main] [--compose docker-compose.yml] [--installation <id>] [--service <service-id>] [--env production]")
 	fmt.Println("  infrctl github installations")
 	fmt.Println("  infrctl github installations register --account org --external-id 12345 [--secret <value>]")
 }

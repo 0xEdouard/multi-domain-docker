@@ -51,10 +51,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/services/", s.requireAuth(s.handleServiceSubroutes))
 	mux.HandleFunc("/v1/github/repos", s.requireAuth(s.handleRepositories))
 	mux.HandleFunc("/v1/github/installations", s.requireAuth(s.handleInstallations))
-    mux.HandleFunc("/v1/github/webhook", s.handleGitHubWebhook)
-    mux.HandleFunc("/v1/build-jobs/claim", s.requireAuth(s.handleBuildJobClaim))
-    mux.HandleFunc("/v1/build-jobs", s.requireAuth(s.handleBuildJobs))
-    mux.HandleFunc("/v1/build-jobs/", s.requireAuth(s.handleBuildJob))
+	mux.HandleFunc("/v1/github/webhook", s.handleGitHubWebhook)
+	mux.HandleFunc("/v1/service-compose/", s.requireAuth(s.handleServiceCompose))
+	mux.HandleFunc("/v1/state/services", s.requireAuth(s.handleServiceState))
+	mux.HandleFunc("/v1/build-jobs/claim", s.requireAuth(s.handleBuildJobClaim))
+	mux.HandleFunc("/v1/build-jobs", s.requireAuth(s.handleBuildJobs))
+	mux.HandleFunc("/v1/build-jobs/", s.requireAuth(s.handleBuildJob))
 	mux.HandleFunc("/v1/traefik/config", s.requireAuth(s.handleTraefikConfig))
 	return s.withJSON(mux)
 }
@@ -373,6 +375,84 @@ func (s *Server) handleServiceSubroutes(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+func (s *Server) handleServiceCompose(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/v1/service-compose/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.NotFound(w, r)
+		return
+	}
+	serviceID := parts[0]
+	service, err := s.store.GetService(serviceID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			http.Error(w, `{"error":"service not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		_ = json.NewEncoder(w).Encode(map[string]string{"compose": service.Compose})
+	case http.MethodPut, http.MethodPost:
+		var payload struct {
+			Compose string `json:"compose"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, `{"error":"invalid json"}`, http.StatusBadRequest)
+			return
+		}
+		service.Compose = payload.Compose
+		if err := s.store.UpdateService(service); err != nil {
+			http.Error(w, `{"error":"failed to update"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	default:
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleServiceState(w http.ResponseWriter, r *http.Request) {
+	projects, err := s.store.ListProjects()
+	if err != nil {
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	type serviceInfo struct {
+		ID           string `json:"id"`
+		ProjectID    string `json:"project_id"`
+		Name         string `json:"name"`
+		Image        string `json:"image"`
+		InternalPort int    `json:"internal_port"`
+		Compose      string `json:"compose"`
+	}
+
+	var services []serviceInfo
+	for _, project := range projects {
+		list, err := s.store.ListServicesByProject(project.ID)
+		if err != nil {
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			return
+		}
+		for _, svc := range list {
+			services = append(services, serviceInfo{
+				ID:           svc.ID,
+				ProjectID:    svc.ProjectID,
+				Name:         svc.Name,
+				Image:        svc.Image,
+				InternalPort: svc.InternalPort,
+				Compose:      svc.Compose,
+			})
+		}
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{"services": services})
+}
+
 func (s *Server) getService(w http.ResponseWriter, r *http.Request, serviceID string) {
 	service, err := s.store.GetService(serviceID)
 	if err != nil {
@@ -525,47 +605,55 @@ func (s *Server) handleTraefikConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBuildJobs(w http.ResponseWriter, r *http.Request) {
-    switch r.Method {
-    case http.MethodGet:
-        jobs, err := s.store.ListBuildJobs()
-        if err != nil {
-            http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
-            return
-        }
-        _ = json.NewEncoder(w).Encode(map[string]any{"build_jobs": jobs})
-    case http.MethodPost:
-        var payload struct {
-            Repository   string `json:"repository"`
-            Ref          string `json:"ref"`
-            Commit       string `json:"commit"`
-            Installation string `json:"installation"`
-            Status       string `json:"status"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-            http.Error(w, `{"error":"invalid json"}`, http.StatusBadRequest)
-            return
-        }
-        if payload.Repository == "" || payload.Commit == "" {
-            http.Error(w, `{"error":"repository and commit required"}`, http.StatusBadRequest)
-            return
-        }
-        job := &models.BuildJob{
-            ID:           newID(),
-            Repository:   payload.Repository,
-            Ref:          payload.Ref,
-            Commit:       payload.Commit,
-            Installation: payload.Installation,
-            Status:       payload.Status,
-        }
-        if err := s.store.CreateBuildJob(job); err != nil {
-            http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err), http.StatusInternalServerError)
-            return
-        }
-        w.WriteHeader(http.StatusCreated)
-        _ = json.NewEncoder(w).Encode(job)
-    default:
-        http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
-    }
+	switch r.Method {
+	case http.MethodGet:
+		jobs, err := s.store.ListBuildJobs()
+		if err != nil {
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"build_jobs": jobs})
+	case http.MethodPost:
+		var payload struct {
+			Repository   string   `json:"repository"`
+			Ref          string   `json:"ref"`
+			Commit       string   `json:"commit"`
+			Installation string   `json:"installation"`
+			Status       string   `json:"status"`
+			ServiceID    string   `json:"service_id"`
+			Environment  string   `json:"environment"`
+			Artifacts    []string `json:"artifacts"`
+			ComposePath  string   `json:"compose_path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, `{"error":"invalid json"}`, http.StatusBadRequest)
+			return
+		}
+		if payload.Repository == "" || payload.Commit == "" {
+			http.Error(w, `{"error":"repository and commit required"}`, http.StatusBadRequest)
+			return
+		}
+		job := &models.BuildJob{
+			ID:           newID(),
+			Repository:   payload.Repository,
+			Ref:          payload.Ref,
+			Commit:       payload.Commit,
+			Installation: payload.Installation,
+			Status:       payload.Status,
+			ServiceID:    payload.ServiceID,
+			Environment:  payload.Environment,
+			Artifacts:    payload.Artifacts,
+			ComposePath:  payload.ComposePath,
+		}
+		if err := s.store.CreateBuildJob(job); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(job)
+	default:
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	}
 }
 
 func (s *Server) handleBuildJob(w http.ResponseWriter, r *http.Request) {
@@ -602,8 +690,10 @@ func (s *Server) handleBuildJob(w http.ResponseWriter, r *http.Request) {
             return
         }
         var payload struct {
-            Status string `json:"status"`
-            Reason string `json:"reason"`
+            Status      string   `json:"status"`
+            Reason      string   `json:"reason"`
+            Artifacts   []string `json:"artifacts"`
+            ComposePath string   `json:"compose_path"`
         }
         if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
             http.Error(w, `{"error":"invalid json"}`, http.StatusBadRequest)
@@ -611,6 +701,12 @@ func (s *Server) handleBuildJob(w http.ResponseWriter, r *http.Request) {
         }
         if payload.Status != "" {
             job.Status = payload.Status
+        }
+        if payload.Artifacts != nil {
+            job.Artifacts = payload.Artifacts
+        }
+        if payload.ComposePath != "" {
+            job.ComposePath = payload.ComposePath
         }
         job.Reason = payload.Reason
         if err := s.store.UpdateBuildJob(job); err != nil {
@@ -717,6 +813,23 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 					Installation: installationID,
 					Status:       "pending",
 				}
+				if owner, name, err := splitRepoFullName(info.Repository); err == nil {
+					repoID := repositoryID(owner, name)
+					repo, repoErr := s.store.GetRepository(repoID)
+					if repoErr == nil {
+						job.ServiceID = repo.ServiceID
+						if repo.Environment != "" {
+							job.Environment = repo.Environment
+						} else if repo.ServiceID != "" {
+							job.Environment = "production"
+						}
+						job.ComposePath = repo.ComposePath
+					} else if repoErr != nil && !errors.Is(repoErr, store.ErrNotFound) {
+						log.Printf("[webhook] repository lookup failed: %v", repoErr)
+					}
+				} else {
+					log.Printf("[webhook] invalid repository name %s: %v", info.Repository, err)
+				}
 				if err := s.store.CreateBuildJob(job); err != nil {
 					log.Printf("[webhook] failed to enqueue build job: %v", err)
 				} else {
@@ -808,6 +921,19 @@ func installationID(account, external string) string {
 	return sanitizeKey(account) + "-" + sanitizeKey(external)
 }
 
+func splitRepoFullName(full string) (string, string, error) {
+	parts := strings.Split(full, "/")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid repository name: %s", full)
+	}
+	owner := strings.TrimSpace(parts[0])
+	name := strings.TrimSpace(parts[1])
+	if owner == "" || name == "" {
+		return "", "", fmt.Errorf("invalid repository name: %s", full)
+	}
+	return owner, name, nil
+}
+
 func resolveRepoOwnerName(info repoInfo) (string, string) {
 	owner := info.Owner
 	name := info.Name
@@ -894,10 +1020,10 @@ func parsePushEvent(payload []byte) (pushEventInfo, error) {
 }
 
 type repoInfo struct {
-    FullName     string
-    Owner        string
-    Name         string
-    DefaultBranch string
+	FullName     string
+	Owner        string
+	Name         string
+	DefaultBranch string
 }
 
 type installationReposInfo struct {
@@ -905,6 +1031,25 @@ type installationReposInfo struct {
     Added    []repoInfo
     Removed  []repoInfo
     Existing []repoInfo
+}
+
+func resolveRepoOwnerName(info repoInfo) (string, string) {
+	owner := strings.TrimSpace(info.Owner)
+	name := strings.TrimSpace(info.Name)
+	if owner == "" || name == "" {
+		if info.FullName != "" {
+			parts := strings.Split(info.FullName, "/")
+			if len(parts) == 2 {
+				if owner == "" {
+					owner = strings.TrimSpace(parts[0])
+				}
+				if name == "" {
+					name = strings.TrimSpace(parts[1])
+				}
+			}
+		}
+	}
+	return owner, name
 }
 
 func parseInstallationReposEvent(payload []byte) (installationReposInfo, error) {

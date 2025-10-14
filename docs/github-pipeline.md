@@ -12,7 +12,7 @@
 2. **push (tracked branch)**
    - Validate webhook signature (now implemented in control plane).
    - Enqueue build job with repo + commit SHA.
-   - Output image tag(s) and call `/v1/services/{id}/deployments` to update desired state.
+   - Build worker clones the repo, builds/pushes the image, uploads the compose file (if present), and calls `/v1/services/{id}/deployments` to update desired state.
 3. **pull_request (opened/synchronized/closed)**
    - For `opened/synchronize`: create or refresh preview environment (unique slug, branch-specific deployment).
    - For `closed/merged`: tear down preview resources and mark deployment inactive.
@@ -24,9 +24,8 @@
    - Option A: `docker compose build` and push resulting images to registry (`ghcr.io/...`).
    - Option B: Use BuildKit/buildpacks per service; store image references back on control plane.
 4. Publish artifacts and update deployment intent via control plane API.
-5. Host agent observes new desired images and reconciles containers.
-6. Temporary: `infrctl builds worker` can claim jobs and mark them complete for manual testing.
-7. `build-worker/main.go` provides a long-running worker daemon capable of polling, claiming jobs, and (currently) simulating builds/pushing status. Replace `performBuild` with real checkout/build logic.
+5. Host agent observes new desired images/compose specs and reconciles containers (single-container via `docker run`, multi-container via `docker compose`).
+6. `build-worker/main.go` provides a long-running worker daemon capable of polling, claiming jobs, cloning repos, building/pushing images, and reporting compose + artifact data back to the control plane. Requires `git`, `docker`, optional `GITHUB_TOKEN`, and registry credentials for pushes.
 
 ## Preview Environments
 - **Naming:** `<project>-pr-<number>` environment stored alongside production/staging.
@@ -37,4 +36,4 @@
 - Registry credentials management (per installation or global).
 - Secret and environment variable injection for builds and runtime.
 - Metrics/log forwarding per deployment and preview env.
-- Implement build worker that checks out code, runs build, pushes images, and updates deployments.
+- Hardening: retries, build cache, streaming logs, preview environment automation.

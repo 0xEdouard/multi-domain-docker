@@ -17,6 +17,7 @@ type Service struct {
 	Name         string       `json:"name"`
 	Image        string       `json:"image"`
 	InternalPort int          `json:"internal_port"`
+	Compose      string       `json:"compose"`
 	CreatedAt    time.Time    `json:"created_at"`
 	UpdatedAt    time.Time    `json:"updated_at"`
 	Domains      []Domain     `json:"domains"`
@@ -75,6 +76,10 @@ type BuildJob struct {
 	WorkerID     string    `json:"worker_id"`
 	StartedAt    time.Time `json:"started_at"`
 	CompletedAt  time.Time `json:"completed_at"`
+	Artifacts    []string  `json:"artifacts"`
+	ServiceID    string    `json:"service_id"`
+	Environment  string    `json:"environment"`
+	ComposePath  string    `json:"compose_path"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

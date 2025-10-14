@@ -24,8 +24,8 @@ Unified control plane, build worker, and host agent for multi-domain deployments
    go run . --control-plane=http://localhost:8080 --traefik-file=/tmp/traefik.yml \
      --deploy-interval=20s --compose-dir ./compose
    ```
-   - Requires Docker/Compose access (mount `/var/run/docker.sock` if containerised).
-   - Mirrors containers labelled `mdp.service=<service-id>` and maps service ports to `127.0.0.1:<internal_port>`.
+   - Requires Docker with the Compose plugin (mount `/var/run/docker.sock` if containerised).
+   - Mirrors single-container services via `docker run` and multi-container stacks via rendered `docker-compose.yml`.
 
 3. **Build Worker**
    ```bash
@@ -34,18 +34,20 @@ Unified control plane, build worker, and host agent for multi-domain deployments
      --workspace ./worker-tmp --registry ghcr.io/your-org --push
    ```
    - Needs `git` + `docker`. Provide `GITHUB_TOKEN` for private repos, and Docker login for `--push`.
+   - Clones the repo, builds/pushes the image, and uploads the `docker-compose.yml` (if configured) back to the control plane.
 
 4. **CLI**
    ```bash
    go run ./cmd/infrctl help
    ```
-   - Example flow:
+  - Example flow:
      ```bash
      infrctl project create --name "Demo"
      infrctl service create --project <project-id> --name web --image ghcr.io/org/web:latest --port 8080
      infrctl domain add --service <service-id> --hostname demo.example.com
-     infrctl github register --repo owner/repo --service <service-id> --env production
+     infrctl github register --repo owner/repo --service <service-id> --env production --compose docker-compose.yml
      ```
+   - `github register` binds a repo to a service/environment and records the compose path so the build worker/agent can run the full stack.
 
 ## GitHub Integration Notes
 - Install the GitHub App and register repositories with `infrctl github register`. Push events queue build jobs automatically.
@@ -64,4 +66,3 @@ Unified control plane, build worker, and host agent for multi-domain deployments
 - All Go modules target Go 1.22+. Run `gofmt`/`go test` within each module once you install the toolchain.
 - Docker/Compose must be available wherever the agent/build worker run.
 - Traefik dynamic configuration lives under `/v1/traefik/config`; host certificates/ACME handling remains managed by Traefik itself.
-

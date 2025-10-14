@@ -1,0 +1,8 @@
+go 1.22
+
+use (
+	./control-plane
+	./agent
+	./cmd/infrctl
+	./build-worker
+)

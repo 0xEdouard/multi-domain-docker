@@ -1,0 +1,16 @@
+services:
+  control-plane:
+    build: .
+    ports:
+      - "8080:8080"
+    command:
+      - control-plane
+      - --addr=:8080
+      - --state=/data/state.json
+      - --le-resolver=le
+      - --api-token=${CP_API_TOKEN:-}
+    environment:
+      CP_API_TOKEN: ${CP_API_TOKEN:-}
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

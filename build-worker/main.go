@@ -51,12 +51,12 @@ func parseFlags() workerConfig {
 	control := flag.String("control-plane", envOrDefault("CONTROL_PLANE_URL", "http://localhost:8080"), "Control plane base URL")
 	token := flag.String("token", os.Getenv("CONTROL_PLANE_TOKEN"), "Bearer token")
 	name := flag.String("name", envOrDefault("BUILD_WORKER_NAME", "builder-local"), "Worker identifier")
-	interval := flag.Duration("interval", 5*time.Second, "Polling interval")
+    interval := flag.Duration("interval", parseDurationEnv("BUILD_WORKER_INTERVAL", 5*time.Second), "Polling interval")
 	auto := flag.Bool("auto-complete", false, "Automatically mark jobs as succeeded")
 	reason := flag.String("reason", "", "Completion reason/message")
 	workspace := flag.String("workspace", envOrDefault("BUILD_WORKER_WORKSPACE", "./worker-tmp"), "Workspace for builds")
 	registry := flag.String("registry", os.Getenv("BUILD_WORKER_REGISTRY"), "Registry prefix (e.g. ghcr.io/org)")
-	push := flag.Bool("push", false, "Push built images to registry")
+    push := flag.Bool("push", envBool("BUILD_WORKER_PUSH", false), "Push built images to registry")
 	keep := flag.Bool("keep-workspace", false, "Keep workspace after builds")
 	ghToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "GitHub token for cloning private repos")
 	flag.Parse()
@@ -266,15 +266,22 @@ func performBuild(ctx context.Context, cfg workerConfig, job *buildJob) ([]strin
 		_ = runCommand(ctx, cfg, workdir, gitEnv(), "git", "remote", "set-url", "origin", fmt.Sprintf("https://github.com/%s.git", job.Repository))
 	}
 
-	var composeData []byte
-	if job.ComposePath != "" {
-		fullPath := filepath.Join(workdir, job.ComposePath)
-		if data, err := os.ReadFile(fullPath); err == nil {
-			composeData = data
-		} else {
-			log.Printf("[worker %s] compose file not found: %s (%v)", cfg.name, job.ComposePath, err)
-		}
-	}
+    composePath := job.ComposePath
+    if composePath == "" {
+        composePath = "docker-compose.yml"
+    }
+
+    var composeData []byte
+    fullPath := filepath.Join(workdir, composePath)
+    if data, err := os.ReadFile(fullPath); err == nil {
+        composeData = data
+        job.ComposePath = composePath
+    } else {
+        if job.ComposePath != "" { // warn only if explicitly requested
+            log.Printf("[worker %s] compose file not found: %s (%v)", cfg.name, composePath, err)
+        }
+        job.ComposePath = ""
+    }
 
 	prefix := cfg.registryPrefix
 	if prefix == "" {
@@ -422,4 +429,31 @@ func envOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func parseDurationEnv(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return fallback
+	}
+	return d
 }

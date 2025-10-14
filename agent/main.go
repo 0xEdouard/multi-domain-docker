@@ -197,6 +197,11 @@ func ensureContainer(ctx context.Context, cfg agentConfig, svc serviceState) err
 		return nil
 	}
 	container := "svc-" + svc.ID
+	composePath := filepath.Join(cfg.composeDir, svc.ID, "docker-compose.yml")
+	if _, err := os.Stat(composePath); err == nil {
+		log.Printf("compose stack detected for %s, bringing it down", svc.ID)
+		_ = runDocker(ctx, "compose", "-f", composePath, "-p", "mdp-"+svc.ID, "down", "--remove-orphans")
+	}
 
 	if err := runDocker(ctx, "pull", svc.Image); err != nil {
 		log.Printf("pull warning for %s: %v", svc.Image, err)
@@ -225,6 +230,7 @@ func ensureContainer(ctx context.Context, cfg agentConfig, svc serviceState) err
 }
 
 func ensureComposeService(ctx context.Context, cfg agentConfig, svc serviceState) error {
+    _ = runDocker(ctx, "rm", "-f", "svc-"+svc.ID)
 	dir := filepath.Join(cfg.composeDir, svc.ID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("compose dir: %w", err)

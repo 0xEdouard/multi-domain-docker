@@ -40,7 +40,7 @@ Unified control plane, build worker, and host agent for multi-domain deployments
    ```bash
    go run ./cmd/infrctl help
    ```
-  - Example flow:
+   - Example flow:
      ```bash
      infrctl project create --name "Demo"
      infrctl service create --project <project-id> --name web --image ghcr.io/org/web:latest --port 8080
@@ -48,6 +48,22 @@ Unified control plane, build worker, and host agent for multi-domain deployments
      infrctl github register --repo owner/repo --service <service-id> --env production --compose docker-compose.yml
      ```
    - `github register` binds a repo to a service/environment and records the compose path so the build worker/agent can run the full stack.
+
+## Run Everything with Docker Compose
+
+1. Create a `.env` file next to `docker-compose.yml` and set:
+   ```env
+   CP_API_TOKEN=changeme
+   BUILD_WORKER_REGISTRY=ghcr.io/your-org
+   GITHUB_TOKEN=ghp_xxx              # optional (private repos)
+   BUILD_WORKER_PUSH=true            # pushes images to registry
+   # BUILD_WORKER_INTERVAL=5s        # optional override
+   # AGENT_DEPLOY_INTERVAL=20s       # optional override
+   ```
+2. On the Docker host, ensure the daemon socket is available (`/var/run/docker.sock`).
+3. Run `docker compose up -d` to start the control plane, build worker, and agent.
+4. Log into your container registry inside the build-worker container (e.g., `docker exec -it mdp-build-worker sh` → `docker login ghcr.io`).
+5. Register services/repos via the CLI (locally or from any host) and push code—builds and deployments will flow automatically.
 
 ## GitHub Integration Notes
 - Install the GitHub App and register repositories with `infrctl github register`. Push events queue build jobs automatically.

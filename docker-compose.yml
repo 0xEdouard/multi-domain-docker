@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  control-plane:
+    build: ./control-plane
+    container_name: mdp-control-plane
+    ports:
+      - "8080:8080"
+    environment:
+      CP_API_TOKEN: ${CP_API_TOKEN:-}
+    command:
+      - control-plane
+      - --addr=:8080
+      - --state=/data/state.json
+      - --api-token=${CP_API_TOKEN:-}
+    volumes:
+      - control-plane-data:/data
+    restart: unless-stopped
+
+  build-worker:
+    build: ./build-worker
+    container_name: mdp-build-worker
+    depends_on:
+      - control-plane
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8080
+      CONTROL_PLANE_TOKEN: ${CP_API_TOKEN:-}
+      BUILD_WORKER_REGISTRY: ${BUILD_WORKER_REGISTRY:-}
+      BUILD_WORKER_WORKSPACE: /workspace
+      BUILD_WORKER_NAME: compose-worker
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      BUILD_WORKER_PUSH: ${BUILD_WORKER_PUSH:-false}
+      BUILD_WORKER_INTERVAL: ${BUILD_WORKER_INTERVAL:-5s}
+    volumes:
+      - build-worker-workspace:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - build-worker
+      - --workspace
+      - /workspace
+      - --interval
+      - ${BUILD_WORKER_INTERVAL:-5s}
+    restart: unless-stopped
+
+  agent:
+    build: ./agent
+    container_name: mdp-agent
+    depends_on:
+      - control-plane
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8080
+      CONTROL_PLANE_TOKEN: ${CP_API_TOKEN:-}
+      TRAEFIK_DYNAMIC_PATH: /data/traefik.yml
+      AGENT_COMPOSE_DIR: /compose
+    volumes:
+      - agent-traefik:/data
+      - agent-compose:/compose
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - agent
+      - --traefik-file
+      - /data/traefik.yml
+      - --compose-dir
+      - /compose
+      - --deploy-interval
+      - ${AGENT_DEPLOY_INTERVAL:-20s}
+    restart: unless-stopped
+
+volumes:
+  control-plane-data:
+  build-worker-workspace:
+  agent-traefik:
+  agent-compose:

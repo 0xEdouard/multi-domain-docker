@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -932,23 +931,6 @@ func splitRepoFullName(full string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid repository name: %s", full)
 	}
 	return owner, name, nil
-}
-
-func resolveRepoOwnerName(info repoInfo) (string, string) {
-	owner := info.Owner
-	name := info.Name
-	if (owner == "" || name == "") && info.FullName != "" {
-		parts := strings.Split(info.FullName, "/")
-		if len(parts) == 2 {
-			if owner == "" {
-				owner = parts[0]
-			}
-			if name == "" {
-				name = parts[1]
-			}
-		}
-	}
-	return strings.TrimSpace(owner), strings.TrimSpace(name)
 }
 
 func extractInstallationID(payload []byte) string {
